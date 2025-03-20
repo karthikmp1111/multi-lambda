@@ -1,22 +1,23 @@
 #!/bin/bash
+set -e  # Exit on any error
 
 LAMBDA_NAME=$(basename "$PWD")
 
 echo "Building $LAMBDA_NAME..."
 
-# Check if requirements.txt exists before installing dependencies
-if [[ ! -f requirements.txt ]]; then
-    echo "Error: requirements.txt not found in $PWD"
+# Move to the correct directory (if needed)
+cd "$(dirname "$0")"
+
+# Verify requirements.txt exists
+if [[ ! -f "requirements.txt" ]]; then
+    echo "❌ ERROR: requirements.txt not found in $(pwd)"
     exit 1
 fi
 
 # Install dependencies
 pip install -r requirements.txt -t .
 
-# Remove any old zip package
-rm -f package.zip
-
-# Create zip package (excluding unnecessary files)
+# Create zip package
 zip -r package.zip . -x "build.sh" "*.pyc" "__pycache__/*"
 
-echo "Build completed for $LAMBDA_NAME"
+echo "✅ Build completed for $LAMBDA_NAME"
