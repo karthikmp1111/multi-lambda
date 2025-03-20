@@ -31,14 +31,28 @@ pipeline {
             }
         }
 
+        // stage('Build Lambda Packages') {
+        //     steps {
+        //         script {
+        //             // sh 'ls -lh lambda-functions/lambda1/'
+        //             def lambdas = ["lambda1", "lambda2", "lambda3"]
+        //             lambdas.each { lambdaName ->
+        //                 echo "Building Lambda: ${lambdaName}"
+        //                 sh "bash lambda-functions/${lambdaName}/build.sh"
+        //             }
+        //         }
+        //     }
+        // }
         stage('Build Lambda Packages') {
             steps {
                 script {
-                    // sh 'ls -lh lambda-functions/lambda1/'
                     def lambdas = ["lambda1", "lambda2", "lambda3"]
                     lambdas.each { lambdaName ->
-                        echo "Building Lambda: ${lambdaName}"
-                        sh "bash lambda-functions/${lambdaName}/build.sh"
+                        if (sh(script: "git diff --quiet HEAD~1 lambda-functions/${lambdaName}", returnStatus: true) != 0) {
+                            sh "bash lambda-functions/${lambdaName}/build.sh"
+                        } else {
+                            echo "No changes detected in ${lambdaName}, skipping build."
+                        }
                     }
                 }
             }
