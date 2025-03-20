@@ -11,6 +11,7 @@ resource "aws_lambda_function" "lambda" {
 
   filename         = "${path.module}/../lambda-functions/${each.key}/package.zip"
   source_code_hash = each.value
+  publish = true
 
   environment {
     variables = {

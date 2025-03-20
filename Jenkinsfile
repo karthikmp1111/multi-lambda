@@ -34,9 +34,10 @@ pipeline {
         stage('Build Lambda Packages') {
             steps {
                 script {
-                    sh 'ls -lh lambda-functions/lambda1/'
+                    // sh 'ls -lh lambda-functions/lambda1/'
                     def lambdas = ["lambda1", "lambda2", "lambda3"]
                     lambdas.each { lambdaName ->
+                        echo "Building Lambda: ${lambdaName}"
                         sh "bash lambda-functions/${lambdaName}/build.sh"
                     }
                 }
