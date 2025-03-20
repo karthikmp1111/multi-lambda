@@ -2,79 +2,81 @@ pipeline {
     agent any
 
     environment {
-        AWS_REGION = "us-west-1"
+        AWS_REGION = 'us-west-1'
+    }
+
+    parameters {
+        choice(name: 'APPLY_OR_DESTROY', choices: ['apply', 'destroy'], description: 'Choose whether to apply or destroy Terraform resources')
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/karthikmp1111/multi-lambda.git'
+                git branch: 'main', url: 'https://github.com/karthikmp1111/terraform-lambda-ci-cd.git'
             }
         }
 
-        stage('Detect Changes') {
+        stage('Setup AWS Credentials') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'AWS_ACCESS_KEY_ID', variable: 'AWS_ACCESS_KEY'),
+                    string(credentialsId: 'AWS_SECRET_ACCESS_KEY', variable: 'AWS_SECRET_KEY')
+                ]) {
+                    sh '''
+                    aws configure set aws_access_key_id $AWS_ACCESS_KEY
+                    aws configure set aws_secret_access_key $AWS_SECRET_KEY
+                    aws configure set region $AWS_REGION
+                    '''
+                }
+            }
+        }
+
+        stage('Build Lambda Packages') {
             steps {
                 script {
-                    def changedFiles = sh(script: "git diff --name-only HEAD~1", returnStdout: true).trim()
-                    env.LAMBDA1_CHANGED = changedFiles.contains("lambda-functions/lambda1/")
-                    env.LAMBDA2_CHANGED = changedFiles.contains("lambda-functions/lambda2/")
-                    env.TERRAFORM_CHANGED = changedFiles.contains("terraform/")
+                    def lambdas = ["lambda1", "lambda2", "lambda3"]
+                    lambdas.each { lambdaName ->
+                        sh "bash lambda-functions/${lambdaName}/build.sh"
+                    }
+                }
+            }
+        }
+
+        stage('Terraform Init') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform init'
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir('terraform') {
+                    sh 'terraform plan'
                 }
             }
         }
 
         stage('Terraform Apply') {
             when {
-                expression { env.TERRAFORM_CHANGED == 'true' }
+                expression { params.APPLY_OR_DESTROY == 'apply' }
             }
             steps {
                 dir('terraform') {
-                    sh 'terraform init'
                     sh 'terraform apply -auto-approve'
                 }
             }
         }
 
-        stage('Deploy Lambda Functions') {
-            parallel {
-                stage('Deploy Lambda1') {
-                    when {
-                        expression { env.LAMBDA1_CHANGED == 'true' }
-                    }
-                    steps {
-                        sh 'bash scripts/deploy_lambda.sh lambda1'
-                    }
-                }
-                stage('Deploy Lambda2') {
-                    when {
-                        expression { env.LAMBDA2_CHANGED == 'true' }
-                    }
-                    steps {
-                        sh 'bash scripts/deploy_lambda.sh lambda2'
-                    }
-                }
-            }
-        }
-
-        stage('Approval for Destroy') {
+        stage('Terraform Destroy') {
             when {
-                expression { return params.DESTROY }
-            }
-            steps {
-                input message: 'Do you want to destroy the infrastructure?', ok: 'Proceed'
-            }
-        }
-
-        stage('Destroy Infrastructure') {
-            when {
-                expression { return params.DESTROY }
+                expression { params.APPLY_OR_DESTROY == 'destroy' }
             }
             steps {
                 dir('terraform') {
                     sh 'terraform destroy -auto-approve'
                 }
-                sh 'bash scripts/destroy_lambda.sh lambda1'
-                sh 'bash scripts/destroy_lambda.sh lambda2'
             }
         }
     }
