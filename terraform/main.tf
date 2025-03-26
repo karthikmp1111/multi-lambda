@@ -11,17 +11,21 @@ resource "aws_lambda_function" "lambda" {
 
   filename         = "${path.module}/../lambda-functions/${each.key}/package.zip"
   source_code_hash = each.value
-  publish = true
+  publish          = true
 
   environment {
     variables = {
       ENV = "dev"
     }
   }
+
+  lifecycle {
+    ignore_changes = [environment, publish]  # Ignores changes in environment variables & publish flag
+  }
 }
 
 resource "aws_iam_role" "lambda_role" {
-  name = "lambda_execution_role_bg"
+  name = "lambda_execution_role_test"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -31,4 +35,8 @@ resource "aws_iam_role" "lambda_role" {
       Principal = { Service = "lambda.amazonaws.com" }
     }]
   })
+
+  lifecycle {
+    ignore_changes = [name]  # Prevents unnecessary IAM role recreation
+  }
 }
