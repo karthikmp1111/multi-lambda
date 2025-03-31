@@ -71,6 +71,7 @@ resource "aws_lambda_function" "lambda" {
   environment {
     variables = {
       ENV = "dev"
+      NEW_VARIABLE = "bg_lambda_test"
     }
   }
 
