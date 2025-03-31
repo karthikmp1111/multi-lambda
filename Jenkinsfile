@@ -217,16 +217,25 @@ pipeline {
             }
         }
 
+        // Only build and upload the Lambda packages when APPLY is selected
         stage('Build and Upload Lambda Packages') {
+            when {
+                expression { params.APPLY_OR_DESTROY == 'apply' }
+            }
             steps {
                 script {
                     def lambdas = LAMBDA_FUNCTIONS.split(',')  // Convert comma-separated string to Groovy list
                     lambdas.each { lambdaName ->
-                        // Rebuild Lambda if any change detected (or always build)
-                        echo "Building and uploading Lambda function: ${lambdaName}"
-                        sh "bash lambda-functions/${lambdaName}/build.sh"  // Ensure this script creates the package.zip
-                        // Upload the built Lambda package to S3
-                        sh "aws s3 cp lambda-functions/${lambdaName}/package.zip s3://$S3_BUCKET/lambda-packages/${lambdaName}/package.zip"
+                        // Check if there are any changes for the lambda function
+                        if (sh(script: "git diff --quiet HEAD~1 lambda-functions/${lambdaName}", returnStatus: true) != 0) {
+                            echo "Changes detected for ${lambdaName}, building and uploading..."
+                            // Build the Lambda package
+                            sh "bash lambda-functions/${lambdaName}/build.sh"  // Ensure this script creates the package.zip
+                            // Upload the built Lambda package to S3
+                            sh "aws s3 cp lambda-functions/${lambdaName}/package.zip s3://$S3_BUCKET/lambda-packages/${lambdaName}/package.zip"
+                        } else {
+                            echo "No changes detected in ${lambdaName}, skipping build and upload."
+                        }
                     }
                 }
             }
