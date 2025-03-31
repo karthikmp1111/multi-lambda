@@ -46,12 +46,14 @@
 # }
 
 
+# locals {
+#   lambda_files = {
+#     for name in var.lambda_names : name => "s3://bg-kar-terraform-state/lambda-packages/${name}/package.zip"
+#   }
+# }
 locals {
-  lambda_files = {
-    for name in var.lambda_names : name => "s3://bg-kar-terraform-state/lambda-packages/${name}/package.zip"
-  }
+  lambda_files = { for name in var.lambda_names : name => filebase64sha256("s3://$S3_BUCKET/lambda-packages/${name}/package.zip") }
 }
-
 resource "aws_lambda_function" "lambda" {
   for_each      = local.lambda_files
   function_name = each.key
