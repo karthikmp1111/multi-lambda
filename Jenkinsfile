@@ -188,8 +188,7 @@ pipeline {
     environment {
         AWS_REGION = 'us-west-1'
         S3_BUCKET = 'bg-kar-terraform-state'
-        // Change this line to a valid string or use def to declare the list inside script block
-        LAMBDA_FUNCTIONS = "lambda1,lambda2,lambda3"  // Use comma-separated string instead of Groovy list
+        LAMBDA_FUNCTIONS = "lambda1,lambda2,lambda3"  // Comma-separated list of lambda function names
     }
 
     parameters {
@@ -221,15 +220,13 @@ pipeline {
         stage('Build and Upload Lambda Packages') {
             steps {
                 script {
-                    def lambdas = ['lambda1', 'lambda2', 'lambda3']  // Define it here as Groovy list
+                    def lambdas = LAMBDA_FUNCTIONS.split(',')  // Convert comma-separated string to Groovy list
                     lambdas.each { lambdaName ->
-                        if (sh(script: "git diff --quiet HEAD~1 lambda-functions/${lambdaName}", returnStatus: true) != 0) {
-                            sh "bash lambda-functions/${lambdaName}/build.sh"
-                            // Upload to S3 after building the package
-                            sh "aws s3 cp lambda-functions/${lambdaName}/package.zip s3://$S3_BUCKET/lambda-packages/${lambdaName}/package.zip"
-                        } else {
-                            echo "No changes detected in ${lambdaName}, skipping build and upload."
-                        }
+                        // Rebuild Lambda if any change detected (or always build)
+                        echo "Building and uploading Lambda function: ${lambdaName}"
+                        sh "bash lambda-functions/${lambdaName}/build.sh"  // Ensure this script creates the package.zip
+                        // Upload the built Lambda package to S3
+                        sh "aws s3 cp lambda-functions/${lambdaName}/package.zip s3://$S3_BUCKET/lambda-packages/${lambdaName}/package.zip"
                     }
                 }
             }
