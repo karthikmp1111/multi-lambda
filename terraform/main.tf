@@ -104,9 +104,14 @@ locals {
   }
 }
 
+# Convert lambda_names list to a map (key = lambda name, value = true)
+locals {
+  lambda_map = { for lambda in var.lambda_names : lambda => true }
+}
+
 # Fetch the S3 objects for the Lambda packages to track changes via their ETag
 data "aws_s3_object" "lambda_package" {
-  for_each = var.lambda_names
+  for_each = local.lambda_map  # Now using the map, not the list
   bucket   = "bg-kar-terraform-state"
   key      = "lambda-packages/${each.key}/package.zip"
 }
