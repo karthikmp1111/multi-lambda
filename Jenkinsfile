@@ -188,7 +188,8 @@ pipeline {
     environment {
         AWS_REGION = 'us-west-1'
         S3_BUCKET = 'bg-kar-terraform-state'
-        LAMBDA_FUNCTIONS = ['lambda1', 'lambda2', 'lambda3']  // List of Lambda functions
+        // Change this line to a valid string or use def to declare the list inside script block
+        LAMBDA_FUNCTIONS = "lambda1,lambda2,lambda3"  // Use comma-separated string instead of Groovy list
     }
 
     parameters {
@@ -220,8 +221,8 @@ pipeline {
         stage('Build and Upload Lambda Packages') {
             steps {
                 script {
-                    // Build Lambda functions
-                    LAMBDA_FUNCTIONS.each { lambdaName ->
+                    def lambdas = ['lambda1', 'lambda2', 'lambda3']  // Define it here as Groovy list
+                    lambdas.each { lambdaName ->
                         if (sh(script: "git diff --quiet HEAD~1 lambda-functions/${lambdaName}", returnStatus: true) != 0) {
                             sh "bash lambda-functions/${lambdaName}/build.sh"
                             // Upload to S3 after building the package
