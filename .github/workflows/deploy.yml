@@ -50,10 +50,6 @@ jobs:
           }
         done
 
-    - name: Print APPLY_OR_DESTROY value for debugging
-      run: |
-        echo "APPLY_OR_DESTROY value: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
-
     - name: Terraform Init
       run: |
         cd terraform
@@ -64,12 +60,14 @@ jobs:
         cd terraform
         terraform plan -out=tfplan
 
+    # Apply Terraform Plan if 'apply' is selected
     - name: Terraform Apply
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
       run: |
         cd terraform
-        terraform apply -auto-approve "tfplan"
+        terraform apply -auto-approve tfplan
 
+    # Destroy Terraform Resources if 'destroy' is selected
     - name: Terraform Destroy
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'destroy' }}
       run: |
