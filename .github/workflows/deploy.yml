@@ -1,0 +1,72 @@
+name: Deploy Lambda Functions with Terraform
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      APPLY_OR_DESTROY:
+        description: 'Choose whether to apply or destroy Terraform resources'
+        required: true
+        type: choice
+        options:
+          - apply
+          - destroy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    env:
+      AWS_REGION: 'us-west-1'
+      S3_BUCKET: 'bg-kar-terraform-state'
+      LAMBDA_FUNCTIONS: 'lambda1,lambda2,lambda3'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up AWS CLI with Credentials
+      run: |
+        aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws configure set region ${{ env.AWS_REGION }}
+
+    - name: Build and Upload Lambda Packages
+      if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
+      run: |
+        lambdas="${{ env.LAMBDA_FUNCTIONS }}"
+        for lambdaName in $(echo $lambdas | tr ',' '\n'); do
+          git diff --quiet HEAD~1 lambda-functions/$lambdaName || {
+            echo "Changes detected for $lambdaName, building and uploading..."
+            bash lambda-functions/$lambdaName/build.sh
+            aws s3 cp lambda-functions/$lambdaName/package.zip s3://$S3_BUCKET/lambda-packages/$lambdaName/package.zip
+          }
+        done
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init
+
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform plan -out=tfplan
+
+    - name: Terraform Apply
+      if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
+      run: |
+        cd terraform
+        terraform apply -auto-approve
+
+    - name: Terraform Destroy
+      if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'destroy' }}
+      run: |
+        cd terraform
+        terraform destroy -auto-approve
+
+    - name: Clean Workspace
+      run: |
+        rm -rf terraform/.terraform lambda-functions/*/*.zip
