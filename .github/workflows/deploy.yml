@@ -90,7 +90,3 @@ jobs:
       run: |
         cd terraform
         terraform destroy -auto-approve
-
-    - name: Clean Workspace
-      run: |
-        rm -rf terraform/.terraform lambda-functions/*/*.zip
