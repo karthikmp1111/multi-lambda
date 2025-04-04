@@ -36,7 +36,7 @@ jobs:
     - name: Install Terraform
       uses: hashicorp/setup-terraform@v1
       with:
-        terraform_version: '1.11.3'  # Latest stable version
+        terraform_version: '1.5.0'  # Upgraded to the latest stable version
 
     - name: Build and Upload Lambda Packages
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
