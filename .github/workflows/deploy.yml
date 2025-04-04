@@ -36,7 +36,7 @@ jobs:
     - name: Install Terraform
       uses: hashicorp/setup-terraform@v1
       with:
-        terraform_version: '1.5.0'  # Upgraded to the latest stable version
+        terraform_version: '1.5.0'
 
     - name: Build and Upload Lambda Packages
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
@@ -54,7 +54,7 @@ jobs:
       run: |
         echo "APPLY_OR_DESTROY value is: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
         echo "GITHUB_EVENT_NAME is: ${{ github.event_name }}"
-        echo "GITHUB_EVENT is: ${{ toJson(github.event) }}"
+        echo "GITHUB_EVENT: ${{ toJson(github.event) }}"
 
     - name: Terraform Init
       run: |
@@ -75,24 +75,28 @@ jobs:
           echo "Terraform plan file tfplan found!"
         fi
 
-    - name: Debug before Terraform Apply
+    - name: Debug before Terraform Apply/Destroy
       run: |
-        echo "Running terraform apply with APPLY_OR_DESTROY: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
-        echo "Terraform Plan path: terraform/tfplan"
-        echo "Is tfplan file present? $(ls -lh terraform/tfplan)"
+        echo "Running terraform apply/destroy with APPLY_OR_DESTROY: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
         terraform version
-        cat terraform/tfplan
+        ls -lh terraform/tfplan
 
+    # Ensure Terraform Apply Runs for 'apply'
     - name: Terraform Apply
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
       run: |
         cd terraform
-        echo "Running terraform apply..."
+        echo "Applying Terraform Plan..."
         terraform apply -auto-approve terraform/tfplan || { echo 'Terraform apply failed'; exit 1; }
+        # Set output to environment file
+        echo "terraform_apply_status=success" >> $GITHUB_ENV
 
+    # Ensure Terraform Destroy Runs for 'destroy'
     - name: Terraform Destroy
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'destroy' }}
       run: |
         cd terraform
-        echo "Running terraform destroy..."
-        terraform destroy -auto-approve
+        echo "Destroying Terraform Resources..."
+        terraform destroy -auto-approve || { echo 'Terraform destroy failed'; exit 1; }
+        # Set output to environment file
+        echo "terraform_destroy_status=success" >> $GITHUB_ENV
