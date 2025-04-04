@@ -81,7 +81,6 @@ jobs:
         terraform version
         ls -lh terraform/tfplan
 
-    # Debugging: Print inputs and check if the condition works correctly
     - name: Debug Apply/Destroy Condition
       run: |
         echo "Condition for APPLY_OR_DESTROY: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
@@ -90,7 +89,7 @@ jobs:
         elif [ "${{ github.event.inputs.APPLY_OR_DESTROY }}" == "destroy" ]; then
           echo "We are going to destroy Terraform resources."
         else
-          echo "Invalid value for APPLY_OR_DESTROY."
+          echo "Invalid value for APPLY_OR_DESTROY: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
         fi
 
     # Ensure Terraform Apply Runs for 'apply'
