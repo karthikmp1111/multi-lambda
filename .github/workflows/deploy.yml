@@ -15,33 +15,52 @@ on:
           - destroy
 
 jobs:
-  deploy:
+  terraform:
+    name: 'Terraform'
     runs-on: ubuntu-latest
+    environment: production
 
-    env:
-      AWS_REGION: 'us-west-1'
-      S3_BUCKET: 'bg-kar-terraform-state'
-      LAMBDA_FUNCTIONS: 'lambda1,lambda2,lambda3'
+    # Use Bash shell regardless of the runner OS
+    defaults:
+      run:
+        shell: bash
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+    # Checkout the repository to the GitHub Actions runner
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - name: Set up AWS CLI with Credentials
+    # Set up AWS CLI with credentials (Assuming you're using GitHub secrets for AWS keys)
+    - name: Set up AWS CLI
       run: |
         aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws configure set region ${{ env.AWS_REGION }}
+        aws configure set region ${{ secrets.AWS_REGION }}
 
-    - name: Install Terraform
+    # Install the latest version of Terraform CLI and configure with Terraform Cloud token
+    - name: Setup Terraform
       uses: hashicorp/setup-terraform@v1
       with:
-        terraform_version: '1.5.0'  # Upgraded to the latest stable version
+        terraform_version: '1.5.0'  # Use the desired version
+        cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
+    # Initialize Terraform (initialize working directory)
+    - name: Terraform Init
+      run: terraform init
+
+    # Format Terraform files to ensure they adhere to a canonical format
+    - name: Terraform Format
+      run: terraform fmt -check
+
+    # Generate Terraform execution plan (this checks what changes will be made)
+    - name: Terraform Plan
+      run: terraform plan -input=false -out=tfplan
+
+    # Build and upload Lambda packages only when APPLY is selected
     - name: Build and Upload Lambda Packages
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
       run: |
-        lambdas="${{ env.LAMBDA_FUNCTIONS }}"
+        lambdas="${{ secrets.LAMBDA_FUNCTIONS }}"
         for lambdaName in $(echo $lambdas | tr ',' '\n'); do
           git diff --quiet HEAD~1 lambda-functions/$lambdaName || {
             echo "Changes detected for $lambdaName, building and uploading..."
@@ -50,23 +69,8 @@ jobs:
           }
         done
 
-    - name: Debug APPLY_OR_DESTROY value
-      run: |
-        echo "APPLY_OR_DESTROY value is: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
-        echo "GITHUB_EVENT_NAME is: ${{ github.event_name }}"
-        echo "GITHUB_EVENT is: ${{ toJson(github.event) }}"
-
-    - name: Terraform Init
-      run: |
-        cd terraform
-        terraform init
-
-    - name: Terraform Plan
-      run: |
-        cd terraform
-        terraform plan -out=tfplan
-
-    - name: Check if tfplan exists
+    # Check if tfplan file exists
+    - name: Check tfplan file existence
       run: |
         if [ ! -f terraform/tfplan ]; then
           echo "Terraform plan file tfplan not found!"
@@ -75,24 +79,14 @@ jobs:
           echo "Terraform plan file tfplan found!"
         fi
 
-    - name: Debug before Terraform Apply
-      run: |
-        echo "Running terraform apply with APPLY_OR_DESTROY: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
-        echo "Terraform Plan path: terraform/tfplan"
-        echo "Is tfplan file present? $(ls -lh terraform/tfplan)"
-        terraform version
-        cat terraform/tfplan
-
+    # Apply Terraform changes (create/update resources based on the plan)
     - name: Terraform Apply
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
       run: |
-        cd terraform
-        echo "Running terraform apply..."
         terraform apply -auto-approve terraform/tfplan || { echo 'Terraform apply failed'; exit 1; }
 
+    # Destroy Terraform-managed resources (if destroy is selected)
     - name: Terraform Destroy
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'destroy' }}
       run: |
-        cd terraform
-        echo "Running terraform destroy..."
-        terraform destroy -auto-approve
+        terraform destroy -auto-approve || { echo 'Terraform destroy failed'; exit 1; }
