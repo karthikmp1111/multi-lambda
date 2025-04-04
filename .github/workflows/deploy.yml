@@ -36,7 +36,7 @@ jobs:
     - name: Install Terraform
       uses: hashicorp/setup-terraform@v1
       with:
-        terraform_version: '1.5.0'  # Upgraded to the latest stable version
+        terraform_version: '1.5.0'  # Ensure you are using the correct version
 
     - name: Build and Upload Lambda Packages
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
@@ -81,18 +81,18 @@ jobs:
         terraform version
         ls -lh terraform/tfplan
 
-    # Apply Step
+    # Ensure Terraform Apply Runs for 'apply'
     - name: Terraform Apply
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
       run: |
-        echo "Applying Terraform Plan..."
         cd terraform
-        terraform apply -auto-approve terraform/tfplan
+        echo "Applying Terraform Plan..."
+        terraform apply -auto-approve terraform/tfplan || { echo 'Terraform apply failed'; exit 1; }
 
-    # Destroy Step
+    # Ensure Terraform Destroy Runs for 'destroy'
     - name: Terraform Destroy
       if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'destroy' }}
       run: |
-        echo "Destroying Terraform Resources..."
         cd terraform
+        echo "Destroying Terraform Resources..."
         terraform destroy -auto-approve
