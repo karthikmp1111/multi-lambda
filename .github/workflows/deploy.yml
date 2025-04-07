@@ -1,14 +1,12 @@
-name: Deploy Lambda Functions with Terraform
+name: Deploy Multi-Lambda with Terraform
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      APPLY_OR_DESTROY:
-        description: 'Choose whether to apply or destroy Terraform resources'
+      action:
+        description: 'Terraform action to perform'
         required: true
+        default: 'apply'
         type: choice
         options:
           - apply
@@ -17,86 +15,55 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: dev
 
     env:
-      AWS_REGION: 'us-west-1'
-      S3_BUCKET: 'bg-kar-terraform-state'
-      LAMBDA_FUNCTIONS: 'lambda1,lambda2,lambda3'
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      S3_BUCKET: bg-kar-terraform-state
+      LAMBDA_FUNCTIONS: lambda1,lambda2,lambda3
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-    - name: Set up AWS CLI with Credentials
-      run: |
-        aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws configure set region ${{ env.AWS_REGION }}
+      - name: Set up AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Install Terraform
-      uses: hashicorp/setup-terraform@v1
-      with:
-        terraform_version: '1.5.0'
+      - name: Detect and build changed Lambda packages
+        if: ${{ github.event.inputs.action == 'apply' }}
+        run: |
+          IFS=',' read -ra LAMBDAS <<< "$LAMBDA_FUNCTIONS"
+          for lambda in "${LAMBDAS[@]}"; do
+            if git diff --quiet HEAD~1 -- "lambda-functions/${lambda}"; then
+              echo "No changes detected for ${lambda}"
+            else
+              echo "Changes detected for ${lambda}, building..."
+              bash lambda-functions/${lambda}/build.sh
+              aws s3 cp lambda-functions/${lambda}/package.zip s3://$S3_BUCKET/lambda-packages/${lambda}/package.zip
+            fi
+          done
 
-    - name: Build and Upload Lambda Packages
-      if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
-      run: |
-        lambdas="${{ env.LAMBDA_FUNCTIONS }}"
-        for lambdaName in $(echo $lambdas | tr ',' '\n'); do
-          git diff --quiet HEAD~1 lambda-functions/$lambdaName || {
-            echo "Changes detected for $lambdaName, building and uploading..."
-            bash lambda-functions/$lambdaName/build.sh
-            aws s3 cp lambda-functions/$lambdaName/package.zip s3://$S3_BUCKET/lambda-packages/$lambdaName/package.zip
-          }
-        done
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
 
-    - name: Debug APPLY_OR_DESTROY value
-      run: |
-        echo "APPLY_OR_DESTROY value is: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
-        echo "GITHUB_EVENT_NAME is: ${{ github.event_name }}"
-        echo "GITHUB_EVENT: ${{ toJson(github.event) }}"
+      - name: Terraform Init
+        working-directory: terraform
+        run: terraform init
 
-    - name: Terraform Init
-      run: |
-        cd terraform
-        terraform init
+      - name: Terraform Plan
+        working-directory: terraform
+        run: terraform plan -out=tfplan
 
-    - name: Terraform Plan
-      run: |
-        cd terraform
-        terraform plan -out=tfplan
+      - name: Terraform Apply
+        if: ${{ github.event.inputs.action == 'apply' }}
+        working-directory: terraform
+        run: terraform apply -auto-approve
 
-    - name: Check if tfplan exists
-      run: |
-        if [ ! -f terraform/tfplan ]; then
-          echo "Terraform plan file tfplan not found!"
-          exit 1
-        else
-          echo "Terraform plan file tfplan found!"
-        fi
-
-    - name: Debug before Terraform Apply/Destroy
-      run: |
-        echo "Running terraform apply/destroy with APPLY_OR_DESTROY: ${{ github.event.inputs.APPLY_OR_DESTROY }}"
-        terraform version
-        ls -lh terraform/tfplan
-
-    # Ensure Terraform Apply Runs for 'apply'
-    - name: Terraform Apply
-      if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'apply' }}
-      run: |
-        cd terraform
-        echo "Applying Terraform Plan..."
-        terraform apply -auto-approve terraform/tfplan || { echo 'Terraform apply failed'; exit 1; }
-        # Set output to environment file
-        echo "terraform_apply_status=success" >> $GITHUB_ENV
-
-    # Ensure Terraform Destroy Runs for 'destroy'
-    - name: Terraform Destroy
-      if: ${{ github.event.inputs.APPLY_OR_DESTROY == 'destroy' }}
-      run: |
-        cd terraform
-        echo "Destroying Terraform Resources..."
-        terraform destroy -auto-approve || { echo 'Terraform destroy failed'; exit 1; }
-        # Set output to environment file
-        echo "terraform_destroy_status=success" >> $GITHUB_ENV
+      - name: Terraform Destroy
+        if: ${{ github.event.inputs.action == 'destroy' }}
+        working-directory: terraform
+        run: terraform destroy -auto-approve
