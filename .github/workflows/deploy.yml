@@ -20,6 +20,7 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       S3_BUCKET: bg-kar-terraform-state
+      LAMBDA_FUNCTIONS: lambda1,lambda2,lambda3
 
     steps:
       - name: Checkout code
@@ -31,6 +32,9 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Ensure all build.sh scripts are executable
+        run: chmod +x lambda-functions/*/build.sh
 
       - name: Build & Upload Changed Lambda Functions
         if: ${{ github.event.inputs.action == 'apply' }}
