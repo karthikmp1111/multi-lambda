@@ -20,7 +20,6 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       S3_BUCKET: bg-kar-terraform-state
-      LAMBDA_FUNCTIONS: lambda1,lambda2,lambda3
 
     steps:
       - name: Checkout code
@@ -33,19 +32,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Detect and build changed Lambda packages
+      - name: Build & Upload Changed Lambda Functions
         if: ${{ github.event.inputs.action == 'apply' }}
         run: |
-          IFS=',' read -ra LAMBDAS <<< "$LAMBDA_FUNCTIONS"
-          for lambda in "${LAMBDAS[@]}"; do
-            if git diff --quiet HEAD~1 -- "lambda-functions/${lambda}"; then
-              echo "No changes detected for ${lambda}"
-            else
-              echo "Changes detected for ${lambda}, building..."
-              bash lambda-functions/${lambda}/build.sh
-              aws s3 cp lambda-functions/${lambda}/package.zip s3://$S3_BUCKET/lambda-packages/${lambda}/package.zip
-            fi
-          done
+          chmod +x scripts/build-and-upload-changed-lambdas.sh
+          ./scripts/build-and-upload-changed-lambdas.sh
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
