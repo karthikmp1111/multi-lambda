@@ -33,12 +33,12 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Detect and build changed Lambda packages
+      - name: Build and Upload Changed Lambda Packages
         if: ${{ github.event.inputs.action == 'apply' }}
         run: |
-          set -e
           echo "🔍 Detecting changed Lambda functions..."
 
+          # Get changed files between HEAD and HEAD~1 or all files if no HEAD~1
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
             CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
           else
@@ -52,17 +52,18 @@ jobs:
           IFS=',' read -ra LAMBDAS <<< "$LAMBDA_FUNCTIONS"
 
           for lambda in "${LAMBDAS[@]}"; do
-            if echo "$CHANGED_FILES" | grep -q "lambda-functions/${lambda}/"; then
-              echo "📦 Building ${lambda}..."
+            if echo "$CHANGED_FILES" | grep -q "^lambda-functions/${lambda}/"; then
+              echo "📦 Changes detected for ${lambda}, building and uploading..."
+              chmod +x lambda-functions/${lambda}/build.sh
               bash lambda-functions/${lambda}/build.sh
-              echo "⬆️ Uploading ${lambda}/package.zip to S3..."
+              echo "☁️ Uploading ${lambda}/package.zip to S3..."
               aws s3 cp lambda-functions/${lambda}/package.zip s3://$S3_BUCKET/lambda-packages/${lambda}/package.zip
             else
-              echo "✅ No changes detected for ${lambda}"
+              echo "✅ No changes in ${lambda}, skipping build and upload."
             fi
           done
 
-      - name: Set up Terraform
+      - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
 
       - name: Terraform Init
