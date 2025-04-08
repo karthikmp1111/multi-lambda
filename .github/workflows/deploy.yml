@@ -33,16 +33,36 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Ensure all build.sh scripts are executable
-        run: chmod +x lambda-functions/*/build.sh
-
-      - name: Build & Upload Changed Lambda Functions
+      - name: Detect and build changed Lambda packages
         if: ${{ github.event.inputs.action == 'apply' }}
         run: |
-          chmod +x scripts/build-and-upload-changed-lambdas.sh
-          ./scripts/build-and-upload-changed-lambdas.sh
+          set -e
+          echo "🔍 Detecting changed Lambda functions..."
 
-      - name: Setup Terraform
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          else
+            echo "⚠️ No previous commit found. Assuming all Lambdas changed."
+            CHANGED_FILES=$(git ls-files)
+          fi
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          IFS=',' read -ra LAMBDAS <<< "$LAMBDA_FUNCTIONS"
+
+          for lambda in "${LAMBDAS[@]}"; do
+            if echo "$CHANGED_FILES" | grep -q "lambda-functions/${lambda}/"; then
+              echo "📦 Building ${lambda}..."
+              bash lambda-functions/${lambda}/build.sh
+              echo "⬆️ Uploading ${lambda}/package.zip to S3..."
+              aws s3 cp lambda-functions/${lambda}/package.zip s3://$S3_BUCKET/lambda-packages/${lambda}/package.zip
+            else
+              echo "✅ No changes detected for ${lambda}"
+            fi
+          done
+
+      - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
 
       - name: Terraform Init
@@ -56,7 +76,7 @@ jobs:
       - name: Terraform Apply
         if: ${{ github.event.inputs.action == 'apply' }}
         working-directory: terraform
-        run: terraform apply -auto-approve
+        run: terraform apply -auto-approve tfplan
 
       - name: Terraform Destroy
         if: ${{ github.event.inputs.action == 'destroy' }}
