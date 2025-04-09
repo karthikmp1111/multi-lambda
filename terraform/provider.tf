@@ -1,7 +1,7 @@
 terraform {
   backend "s3" {
     bucket = "bg-kar-terraform-state"
-    key    = "terraform.tfstate"
+    key    = "terraform-new.tfstate"
     region = "us-west-1"
     encrypt = true
   }
